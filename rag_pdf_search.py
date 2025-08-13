@@ -102,6 +102,6 @@ def rag_answer(query):
 # 7. Test Query
 # =======================
 if __name__ == "__main__":
-    query = "what is the title and author of this article ?"
+    query = "what is supervised learning ?"
     print("Query:", query)
     print("Answer:", rag_answer(query))
