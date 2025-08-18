@@ -123,4 +123,4 @@ async def upload_pdf(file: UploadFile = File(...)):
     new_embeddings = embedding_model.encode(text_chunks)
     index.add(np.array(new_embeddings).astype('float32'))
 
-    return {"message": f"{file.filename} uploaded and indexed successfully!"}
+    return {"message": f"{file.filename} Nice uploaded and indexed successfully!"}
