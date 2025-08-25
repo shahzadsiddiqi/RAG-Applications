@@ -1,104 +1,118 @@
-import streamlit as st
 import pandas as pd
-import seaborn as sns
+import streamlit as st
 import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
 
-# --- Load Data ---
-df = pd.read_csv("F:/working-projects/customer_support_rag/customer_support_tickets2.csv")
+# ===============================
+# 📌 1. Load & Clean Dataset
+# ===============================
+@st.cache_data
+def load_data():
+    df = pd.read_csv("F:/working-projects/RAG-Applications/customer_support_rag/customer_support_tickets2.csv")
 
-# --- Utility: Clean all numeric-looking columns ---
-def clean_numeric_columns(df):
-    for col in df.columns:
-        if df[col].dtype == "object":
-            df[col] = df[col].astype(str).str.extract(r'(\d+\.?\d*)')[0]
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    # Clean numeric columns to avoid errors
+    numeric_cols = ["Resolution Time (hours)", "Customer Satisfaction (1–5)", "Response Time (minutes)"]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
     return df
 
-df = clean_numeric_columns(df)
+df = load_data()
 
-# --- Extra safety: force key metrics to numeric ---
-for col in ["First Response Time", "Time to Resolution", "Customer Satisfaction Rating"]:
-    if col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+# Page title
+st.title("📊 Customer Support Ticket Dashboard")
+st.markdown("Analyze ticket trends, satisfaction, and resolution metrics.")
 
-# --- Dashboard Title ---
-st.title("📊 Customer Support Dashboard")
+# ===============================
+# 📌 2. Filter-based Query Interface
+# ===============================
+st.markdown("## 🔍 Filter Tickets")
 
-# --- Key Metrics ---
-col1, col2, col3 = st.columns(3)
+# Dropdowns for filtering
+status_filter = st.selectbox("Filter by Status", ["All"] + sorted(df["Ticket Status"].dropna().unique()))
+priority_filter = st.selectbox("Filter by Priority", ["All"] + sorted(df["Ticket Priority"].dropna().unique()))
+channel_filter = st.selectbox("Filter by Channel", ["All"] + sorted(df["Ticket Channel"].dropna().unique()))
 
+# Apply filters
+filtered_df = df.copy()
+if status_filter != "All":
+    filtered_df = filtered_df[filtered_df["Ticket Status"] == status_filter]
+if priority_filter != "All":
+    filtered_df = filtered_df[filtered_df["Ticket Priority"] == priority_filter]
+if channel_filter != "All":
+    filtered_df = filtered_df[filtered_df["Ticket Channel"] == channel_filter]
+
+# Display filtered results
+st.markdown("### 🎯 Filtered Tickets")
+st.dataframe(filtered_df)
+
+# ===============================
+# 📌 3. Visual Analytics
+# ===============================
+st.markdown("## 📈 Visual Analytics")
+
+col1, col2 = st.columns(2)
+
+# Chart 1: Status Distribution
 with col1:
-    avg_response = df["First Response Time"].mean() if "First Response Time" in df.columns else 0
-    st.metric("⏱ Avg First Response Time", f"{avg_response:.2f}")
+    st.markdown("### Ticket Status Distribution")
+    fig, ax = plt.subplots()
+    df["Ticket Status"].value_counts().plot(kind="bar", ax=ax, color="skyblue")
+    ax.set_ylabel("Count")
+    st.pyplot(fig)
 
+# Chart 2: Priority Distribution
 with col2:
-    avg_resolution = df["Time to Resolution"].mean() if "Time to Resolution" in df.columns else 0
-    st.metric("✅ Avg Resolution Time", f"{avg_resolution:.2f}")
+    st.markdown("### Ticket Priority Distribution")
+    fig, ax = plt.subplots()
+    df["Ticket Priority"].value_counts().plot(kind="bar", ax=ax, color="lightgreen")
+    ax.set_ylabel("Count")
+    st.pyplot(fig)
 
-with col3:
-    avg_satisfaction = df["Customer Satisfaction Rating"].mean() if "Customer Satisfaction Rating" in df.columns else 0
-    st.metric("⭐ Avg Satisfaction", f"{avg_satisfaction:.2f}")
-
-# --- FRAME 1: Ticket Distribution Charts ---
-st.markdown("### 📦 Ticket Distributions")
-
-colA, colB = st.columns(2)
-colC, colD = st.columns(2)
-
-with colA:
-    if "Ticket Status" in df.columns:
-        st.subheader("📌 Status")
-        st.bar_chart(df["Ticket Status"].value_counts())
-
-with colB:
-    if "Ticket Priority" in df.columns:
-        st.subheader("⚡ Priority")
-        st.bar_chart(df["Ticket Priority"].value_counts())
-
-with colC:
-    if "Ticket Channel" in df.columns:
-        st.subheader("📡 Channel")
-        st.bar_chart(df["Ticket Channel"].value_counts())
-
-with colD:
-    if "Created Date" in df.columns:
-        st.subheader("📅 Over Time")
-        df["Created Date"] = pd.to_datetime(df["Created Date"], errors="coerce")
-        trend = df.groupby(df["Created Date"].dt.to_period("M")).size()
-        st.line_chart(trend)
-
-# --- FRAME 2: Resolution & Correlations ---
-st.markdown("### 📈 Resolution & Insights")
-
-colE, colF = st.columns(2)
-colG, colH = st.columns(2)
-
-with colE:
-    if "Ticket Priority" in df.columns and "Time to Resolution" in df.columns:
-        st.subheader("⚡ Resolution by Priority")
-        priority_res = df.groupby("Ticket Priority")["Time to Resolution"].mean()
-        st.bar_chart(priority_res)
-
-with colF:
-    numeric_df = df.select_dtypes(include=["float64", "int64"])
-    if not numeric_df.empty:
-        st.subheader("📊 Correlation Heatmap")
+# Chart 3: Avg Resolution Time by Channel
+with col1:
+    st.markdown("### Avg Resolution Time by Channel")
+    if "Resolution Time (hours)" in df.columns:
         fig, ax = plt.subplots()
-        sns.heatmap(numeric_df.corr(), annot=True, cmap="coolwarm", ax=ax)
+        df.groupby("Ticket Channel")["Resolution Time (hours)"].mean().plot(kind="bar", ax=ax, color="salmon")
+        ax.set_ylabel("Avg Hours")
         st.pyplot(fig)
 
-with colG:
-    if "Customer Satisfaction Rating" in df.columns and "Ticket Channel" in df.columns:
-        st.subheader("⭐ Satisfaction by Channel")
-        sat_by_channel = df.groupby("Ticket Channel")["Customer Satisfaction Rating"].mean()
-        st.bar_chart(sat_by_channel)
+# Chart 4: Avg Satisfaction by Priority
+with col2:
+    st.markdown("### Avg Satisfaction by Priority")
+    if "Customer Satisfaction (1–5)" in df.columns:
+        fig, ax = plt.subplots()
+        df.groupby("Ticket Priority")["Customer Satisfaction (1–5)"].mean().plot(kind="bar", ax=ax, color="orange")
+        ax.set_ylabel("Avg Rating")
+        st.pyplot(fig)
 
-with colH:
-    if "Customer Satisfaction Rating" in df.columns and "Ticket Priority" in df.columns:
-        st.subheader("⭐ Satisfaction by Priority")
-        sat_by_priority = df.groupby("Ticket Priority")["Customer Satisfaction Rating"].mean()
-        st.bar_chart(sat_by_priority)
+# ===============================
+# 📌 4. Correlation Heatmap
+# ===============================
+st.markdown("## 🔥 Correlation Heatmap")
 
-# --- Raw Data at Bottom ---
-st.markdown("### 📂 Raw Ticket Data")
-st.dataframe(df)
+# Select only numeric columns
+numeric_df = df.select_dtypes(include=[np.number])
+
+if not numeric_df.empty and numeric_df.shape[1] > 1:
+    corr = numeric_df.corr()
+    fig, ax = plt.subplots()
+    sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
+    st.pyplot(fig)
+else:
+    st.warning("Not enough numeric data to compute correlations.")
+
+# ===============================
+# 📌 5. Instructions & Notes
+# ===============================
+st.markdown("""
+---
+### 📝 Notes:
+- All numeric fields are automatically cleaned (non-numeric values converted to NaN).
+- Use the dropdowns above to filter tickets interactively.
+- Correlation heatmap is shown only for valid numeric columns.
+- Add more widgets or charts as needed!
+""")
